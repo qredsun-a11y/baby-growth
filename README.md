@@ -1,5 +1,11 @@
 # 宝宝营养助手 · V1
 
+> 📦 **这个仓库里有两样东西，别搞混**：
+> - `lib/`、`pubspec.yaml`、`android/`、`ios/` —— Flutter App 源码，下面第 0～8 节是它的打包指南。
+> - `skills/baby-growth-tracker/` —— **Agent Skill**，把同一套营养计算与成长数据维护能力独立出来，给 AI 助手直接用。
+>
+> **只想装 Skill？** 不需要 Flutter、不需要手机，也不用看下面几节，直接跳到 [第 9 节：从 Git 安装 Agent Skill](#9-从-git-安装-agent-skill)。
+
 面向 1-3 岁宝宝的喂养记录与营养建议 App。**纯本地离线**：数据、照片、营养库全在手机里，不联网，不上传。
 
 - 建档：昵称、生日（自动算年龄）、身高、体重 + 定制项（过敏 / 个头 / 缺铁风险）
@@ -253,3 +259,87 @@ flutter build ipa --release
 - 本 App 不采集、不上传任何个人数据，无隐私政策网络要求；如要上架应用商店，仍可能需要按平台要求提交隐私说明。
 - 儿童健康类建议涉及专业性，App 内已放置免责声明；对外宣传避免"诊断/治疗"等医疗化措辞。
 - 本指南只提供**本地打包**方法，不承诺应用商店上架与审核结果。
+
+---
+
+## 9. 从 Git 安装 Agent Skill
+
+`skills/baby-growth-tracker/` 是**独立于 App** 的 Agent Skill：把喂养记录、营养计算、WHO 生长曲线判型和 7/30 天报告做成 AI 可直接调用的能力。**不需要 Flutter、不需要手机、不需要 App 数据**，只要 Python 3.8+ 和一个支持 Skill 的 Agent 宿主（WorkBuddy 等）。
+
+在线目录：https://github.com/qredsun-a11y/baby-growth/tree/main/skills/baby-growth-tracker
+
+### 9.1 克隆仓库
+
+```bash
+git clone https://github.com/qredsun-a11y/baby-growth.git
+cd baby-growth
+```
+
+只想拿 Skill、不想下载 App 源码，用 sparse checkout：
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/qredsun-a11y/baby-growth.git
+cd baby-growth
+git sparse-checkout set skills/baby-growth-tracker
+```
+
+也可以不装 git：在 GitHub 点 `Code → Download ZIP`，解压后从 `skills/` 里取出 `baby-growth-tracker/` 文件夹。
+
+### 9.2 拷到技能目录（关键一步）
+
+**个人使用** → 用户级技能目录 `~/.workbuddy/skills/`：
+
+```bash
+mkdir -p ~/.workbuddy/skills
+cp -r skills/baby-growth-tracker ~/.workbuddy/skills/
+```
+
+上面的 `cp -r` 在 Windows Git Bash、macOS、Linux 通用。不用 Git Bash 的 Windows 用户，用 PowerShell：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.workbuddy\skills" | Out-Null
+Copy-Item -Recurse -Force ".\skills\baby-growth-tracker" "$env:USERPROFILE\.workbuddy\skills\"
+```
+
+**团队共享** → 项目级技能目录，随项目仓库提交，clone 该项目的人自动带上这个技能：
+
+```bash
+PROJECT=/path/to/your/project          # 改成你的项目路径
+mkdir -p "$PROJECT/.workbuddy/skills"
+cp -r skills/baby-growth-tracker "$PROJECT/.workbuddy/skills/"
+```
+
+拷完的最终结构必须是下面这样，`SKILL.md` 直接位于 `baby-growth-tracker/` 里面：
+
+```
+~/.workbuddy/skills/
+└── baby-growth-tracker/
+    ├── SKILL.md
+    ├── INSTALL.md
+    ├── UNIVERSAL.md
+    ├── scripts/baby.py
+    ├── assets/
+    └── references/
+```
+
+⚠️ 别多套一层目录（如 `skills/baby-growth-tracker/baby-growth-tracker/SKILL.md`），也别把里面的文件散着放进 `skills/`，否则宿主识别不到。
+
+### 9.3 刷新与初始化
+
+1. 重启 WorkBuddy（或在技能设置里刷新），「已安装」列表里应出现 `baby-growth-tracker`。
+2. 拿到的是空库，先在技能目录下初始化：
+
+```bash
+cd ~/.workbuddy/skills/baby-growth-tracker
+python scripts/baby.py init
+python scripts/baby.py add-baby --name 宝宝 --birth 2025-01-30 --height 80 --weight 10
+python scripts/baby.py status
+```
+
+macOS / Linux 把 `python` 换成 `python3`。已有备份则改跑 `python scripts/baby.py import-backup --file 备份.json --replace`。
+
+### 9.4 注意
+
+- 数据只落在 `~/.workbuddy/baby-growth/data.json`，仓库里的技能包**不含任何个人数据**。本仓库是公开的，切勿把 `data.json`、`*.json.bak` 或导出的备份 JSON 提交上去。
+- 技能包只用 Python 标准库，无 pip 依赖、不联网。完整安装与隐私说明见 `skills/baby-growth-tracker/INSTALL.md`；接到其它 Agent 宿主见同目录 `UNIVERSAL.md`。
+- 营养建议为内置规则生成的近似值，仅供参考，不构成医疗诊断。

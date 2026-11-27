@@ -121,7 +121,7 @@ python scripts/baby.py export --out "备份.json"
 
 | 文件 | 内容 |
 |---|---|
-| `INSTALL.md` | 面向接收方的安装、初始化、验证与隐私说明（分享时一起给） |
+| `INSTALL.md` | 面向接收方的安装（zip / 项目级 / Git clone）、初始化、验证与隐私说明（分享时一起给） |
 | `UNIVERSAL.md` | 跨 Agent / 跨模型接入：各宿主技能目录、AGENTS.md 片段、工具化包装、兼容性注意 |
 | `scripts/baby.py` | 数据 CRUD、营养计算、WHO 判型、报告生成（唯一执行入口） |
 | `references/data-contract.md` | JSON 数据契约、字段单位、ID 与日期规则、迁移合并策略 |

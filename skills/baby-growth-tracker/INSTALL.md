@@ -42,15 +42,51 @@
 
 把 `baby-growth-tracker/` 放到项目根目录的 `.workbuddy/skills/baby-growth-tracker/`，随代码仓库提交。clone 该项目的人都会自动带上这个技能。
 
-命令行等价写法：
+命令行写法（在项目根目录执行）：
 
 ```bash
-# Windows（Git Bash）
-cp -r baby-growth-tracker ~/.workbuddy/skills/
-
-# macOS / Linux
-cp -r baby-growth-tracker ~/.workbuddy/skills/
+mkdir -p .workbuddy/skills
+cp -r baby-growth-tracker .workbuddy/skills/
 ```
+
+### 方式 C：从 Git 仓库安装
+
+适合直接发仓库链接、不走 zip 的场景。完整版见仓库根目录 `README.md` 第 9 节。
+
+**1) 克隆仓库**
+
+```bash
+git clone https://github.com/qredsun-a11y/baby-growth.git
+cd baby-growth
+```
+
+只想拿 Skill、不想下载 App 源码：
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/qredsun-a11y/baby-growth.git
+cd baby-growth
+git sparse-checkout set skills/baby-growth-tracker
+```
+
+**2) 把整个文件夹拷进用户技能目录**（别只拷里面的文件）
+
+```bash
+mkdir -p ~/.workbuddy/skills
+cp -r skills/baby-growth-tracker ~/.workbuddy/skills/
+```
+
+上面这条在 Windows Git Bash、macOS、Linux 通用。Windows PowerShell 写法：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.workbuddy\skills" | Out-Null
+Copy-Item -Recurse -Force ".\skills\baby-growth-tracker" "$env:USERPROFILE\.workbuddy\skills\"
+```
+
+最终结构同样必须是 `~/.workbuddy/skills/baby-growth-tracker/SKILL.md`。
+
+**3) 重启 WorkBuddy**，然后按下方「首次使用」初始化。
+
+> 仓库是公开的且含 App 源码，但 Skill 不依赖 Flutter / App / 手机。别把 `data.json` 或导出的备份 JSON 提交进仓库。
 
 ## 首次使用：必须初始化数据
 
