@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../data/food_database.dart';
 import '../db/database_helper.dart';
 import '../models/meal.dart';
-import '../theme.dart';
 import 'meal_record_page.dart';
 
 /// 餐次详情页：看这一餐吃了什么、照片、备注；可编辑/删除。
@@ -117,6 +116,25 @@ class _MealDetailPageState extends State<MealDetailPage> {
                 }).toList(),
               ),
             ),
+            if (meal.vitaminASupplement > 0 || meal.vitaminCSupplement > 0) ...[
+              const SizedBox(height: 16),
+              const Text('额外补充剂', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (meal.vitaminASupplement > 0)
+                        Text('维生素A  ${meal.vitaminASupplement.toStringAsFixed(0)} μg'),
+                      if (meal.vitaminCSupplement > 0)
+                        Text('维生素C  ${meal.vitaminCSupplement.toStringAsFixed(0)} mg'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             const Text('备注', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),

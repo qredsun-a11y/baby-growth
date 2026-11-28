@@ -1,7 +1,7 @@
 name: baby_nutrition
 description: 1-3 岁宝宝营养喂养助手（纯本地离线）
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.1.2+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -24,6 +24,9 @@ dependencies:
   timezone: ^0.9.4
   # 日期格式化（需与 flutter_localizations 依赖的 intl 版本对齐）
   intl: ^0.20.3
+  # 选择导入的 JSON 文件 / 分享导出的 JSON 文件
+  file_picker: ^10.3.0
+  share_plus: ^11.0.0
 
 dev_dependencies:
   flutter_test:

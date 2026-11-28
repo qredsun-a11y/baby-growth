@@ -4,25 +4,51 @@ import '../db/database_helper.dart';
 import '../models/baby.dart';
 import '../models/meal.dart';
 import '../models/nutrient.dart';
+import 'app_state.dart';
 
 /// 营养建议引擎：把"每餐记录"汇总成"当日摄入"，对比推荐量，生成建议。
-/// 全程本地计算，无网络。
+/// 全程本地计算，无网络。V2：按 babyId 过滤。
 class NutritionService {
   NutritionService._();
   static final NutritionService instance = NutritionService._();
 
-  /// 计算指定日期的总摄入
-  Future<Nutrient> intakeForDate(DateTime date) async {
-    final meals = await DatabaseHelper.instance.getMealsByDate(date);
+  int _resolveBabyId(int? babyId) => babyId ?? AppState.instance.activeBabyId ?? 1;
+
+  /// 计算指定宝宝某天的总摄入
+  Future<Nutrient> intakeForDate(DateTime date, {int? babyId}) async {
+    final meals = await DatabaseHelper.instance.getMealsByDate(date, _resolveBabyId(babyId));
+    return sumOfMeals(meals);
+  }
+
+  /// 某段时间 [start, end) 内，按天汇总摄入：key = yyyy-MM-dd
+  Future<Map<String, Nutrient>> intakeByDay(
+    DateTime start,
+    DateTime end, {
+    int? babyId,
+  }) async {
+    final meals = await DatabaseHelper.instance.getMealsInRange(start, end, _resolveBabyId(babyId));
+    final result = <String, Nutrient>{};
+    for (final meal in meals) {
+      final key = _dayKey(meal.date);
+      result[key] = (result[key] ?? const Nutrient()) + nutrientOfMeal(meal);
+    }
+    return result;
+  }
+
+  String _dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// 一批餐次的营养合计（公开给报告页复用）
+  Nutrient sumOfMeals(List<Meal> meals) {
     Nutrient total = const Nutrient();
     for (final meal in meals) {
-      total = total + _nutrientOfMeal(meal);
+      total = total + nutrientOfMeal(meal);
     }
     return total;
   }
 
   /// 单餐营养素 = Σ(食物每100g含量 × 克数/100)
-  Nutrient _nutrientOfMeal(Meal meal) {
+  Nutrient nutrientOfMeal(Meal meal) {
     Nutrient sum = const Nutrient();
     final List<MealFood> foods;
     try {
@@ -43,13 +69,21 @@ class NutritionService {
         vitaminC: food.vitaminC,
       ).scale(ratio);
     }
+    // V2.1：额外补充剂（鱼肝油/维C片等）计入该餐摄入
+    if (meal.vitaminASupplement > 0 || meal.vitaminCSupplement > 0) {
+      sum = sum + Nutrient(
+        vitaminA: meal.vitaminASupplement,
+        vitaminC: meal.vitaminCSupplement,
+      );
+    }
     return sum;
   }
 
   /// 生成当天的建议清单。
   /// 规则：达成率 < 60% 提示"偏低"并给食物建议；> 130% 提示"偏高"；其余"达标"。
-  Future<List<Advice>> adviceForDate(DateTime date, Baby baby) async {
-    final intake = await intakeForDate(date);
+  Future<List<Advice>> adviceForDate(DateTime date, Baby baby, {int? babyId}) async {
+    final bid = _resolveBabyId(babyId);
+    final intake = await intakeForDate(date, babyId: bid);
     final target = Recommendation.forBaby(baby);
     final advice = <Advice>[];
 
@@ -92,7 +126,7 @@ class NutritionService {
     }
 
     // 没记录任何一餐时，给引导文案
-    final meals = await DatabaseHelper.instance.getMealsByDate(date);
+    final meals = await DatabaseHelper.instance.getMealsByDate(date, bid);
     if (meals.isEmpty) {
       advice.insert(
         0,

@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.example.baby_nutrition"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker/share_plus 等插件要求 compileSdk >= 36（Flutter 默认 34 会冲突）
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

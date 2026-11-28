@@ -19,11 +19,14 @@ class MealFood {
 /// foods 用 JSON 字符串存进数据库（V1 简单起见，不上关联表）。
 class Meal {
   final int? id;
+  final int babyId;         // 属于哪个宝宝（V2 多宝宝）
   final String mealType;    // breakfast / lunch / dinner / snack
   final DateTime date;      // 哪一餐（含日期）
   final String foodsJson;   // List<MealFood> 的 JSON
   final String? photoPath;  // 照片在 App 私有目录里的路径
   final String note;        // 备注
+  final double vitaminASupplement; // 额外补充的维生素A (μg)，如鱼肝油/补充剂
+  final double vitaminCSupplement; // 额外补充的维生素C (mg)，如维C片
 
   static const typeBreakfast = 'breakfast';
   static const typeLunch = 'lunch';
@@ -39,11 +42,14 @@ class Meal {
 
   const Meal({
     this.id,
+    this.babyId = 1,
     required this.mealType,
     required this.date,
     required this.foodsJson,
     this.photoPath,
     this.note = '',
+    this.vitaminASupplement = 0,
+    this.vitaminCSupplement = 0,
   });
 
   String get typeLabel => typeLabels[mealType] ?? '其他';
@@ -59,19 +65,25 @@ class Meal {
 
   Map<String, Object?> toMap() => {
         'id': id,
+        'babyId': babyId,
         'mealType': mealType,
         'date': date.toIso8601String(),
         'foodsJson': foodsJson,
         'photoPath': photoPath,
         'note': note,
+        'vitaminASupplement': vitaminASupplement,
+        'vitaminCSupplement': vitaminCSupplement,
       };
 
   factory Meal.fromMap(Map<String, Object?> map) => Meal(
         id: map['id'] as int?,
+        babyId: (map['babyId'] as num?)?.toInt() ?? 1,
         mealType: map['mealType'] as String,
         date: DateTime.parse(map['date'] as String),
         foodsJson: map['foodsJson'] as String,
         photoPath: map['photoPath'] as String?,
         note: (map['note'] as String?) ?? '',
+        vitaminASupplement: (map['vitaminASupplement'] as num?)?.toDouble() ?? 0,
+        vitaminCSupplement: (map['vitaminCSupplement'] as num?)?.toDouble() ?? 0,
       );
 }

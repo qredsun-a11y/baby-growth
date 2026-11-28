@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../db/database_helper.dart';
+import '../services/app_state.dart';
 import '../services/nutrition_service.dart';
 import '../theme.dart';
 
@@ -24,7 +24,7 @@ class _NutritionAdvicePageState extends State<NutritionAdvicePage> {
   }
 
   Future<void> _load() async {
-    final baby = await DatabaseHelper.instance.getBaby();
+    final baby = AppState.instance.baby;
     if (baby == null) {
       if (!mounted) return;
       setState(() {

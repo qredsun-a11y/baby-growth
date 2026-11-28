@@ -6,8 +6,10 @@ import 'package:path_provider/path_provider.dart';
 
 import '../data/food_database.dart';
 import '../db/database_helper.dart';
+import '../models/favorite_combo.dart';
 import '../models/food.dart';
 import '../models/meal.dart';
+import '../services/app_state.dart';
 import '../theme.dart';
 
 /// 进食记录页：选餐次 → 选食物+份量 → 拍照 → 备注 → 保存。
@@ -27,14 +29,25 @@ class _MealRecordPageState extends State<MealRecordPage> {
   final Map<String, double> _selected = {}; // foodId -> 克数
   final Map<String, TextEditingController> _gramCtrl = {}; // foodId -> 自定义克重输入框
   final _noteCtrl = TextEditingController();
+  final _vitaminACtrl = TextEditingController(); // 额外补充的维生素A (μg)
+  final _vitaminCCtrl = TextEditingController(); // 额外补充的维生素C (mg)
   File? _photo;
   String? _savedPhotoPath;
   bool _loading = false;
+  List<FavoriteCombo> _combos = [];
 
   @override
   void initState() {
     super.initState();
     if (widget.mealId != null) _loadMeal();
+    _loadCombos();
+  }
+
+  Future<void> _loadCombos() async {
+    final babyId = AppState.instance.activeBabyId ?? 1;
+    final combos = await DatabaseHelper.instance.getCombos(babyId);
+    if (!mounted) return;
+    setState(() => _combos = combos);
   }
 
   Future<void> _loadMeal() async {
@@ -44,6 +57,10 @@ class _MealRecordPageState extends State<MealRecordPage> {
       _mealType = meal.mealType;
       _date = meal.date;
       _noteCtrl.text = meal.note;
+      _vitaminACtrl.text = meal.vitaminASupplement > 0
+          ? _formatGrams(meal.vitaminASupplement) : '';
+      _vitaminCCtrl.text = meal.vitaminCSupplement > 0
+          ? _formatGrams(meal.vitaminCSupplement) : '';
       _savedPhotoPath = meal.photoPath;
       if (_savedPhotoPath != null) _photo = File(_savedPhotoPath!);
       try {
@@ -107,6 +124,98 @@ class _MealRecordPageState extends State<MealRecordPage> {
     );
   }
 
+  /// 套用常用组合：清空当前选择，按组合的食物+克数填入
+  void _applyCombo(FavoriteCombo combo) {
+    setState(() {
+      for (final c in _gramCtrl.values) {
+        c.dispose();
+      }
+      _selected.clear();
+      _gramCtrl.clear();
+      for (final mf in combo.foods) {
+        if (FoodDatabase.byId(mf.foodId) == null) continue;
+        _selected[mf.foodId] = mf.grams;
+        _gramCtrl[mf.foodId] = TextEditingController(text: _formatGrams(mf.grams));
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已套用「${combo.name}」')),
+    );
+  }
+
+  /// 把当前选中的食物保存为常用组合
+  Future<void> _saveAsCombo() async {
+    if (_selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('先选好食物，再保存为组合')),
+      );
+      return;
+    }
+    final nameCtrl = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('保存为常用组合'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '组合名称',
+            hintText: '如：早餐常吃 / 补铁套餐',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () {
+              if (nameCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('请填组合名称')),
+                );
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    final combo = FavoriteCombo.fromMapData(
+      babyId: AppState.instance.activeBabyId ?? 1,
+      name: nameCtrl.text.trim(),
+      items: Map<String, double>.from(_selected),
+    );
+    await DatabaseHelper.instance.insertCombo(combo);
+    await _loadCombos();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已保存组合「${combo.name}」')),
+    );
+  }
+
+  /// 删除常用组合
+  Future<void> _deleteCombo(FavoriteCombo combo) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('删除组合「${combo.name}」？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await DatabaseHelper.instance.deleteCombo(combo.id!);
+      await _loadCombos();
+    }
+  }
+
   /// 点食物：未选则加入默认份量，已选则移除
   void _toggleFood(Food food) {
     setState(() {
@@ -130,10 +239,21 @@ class _MealRecordPageState extends State<MealRecordPage> {
     if (parsed != null && parsed > 0) _selected[food.id] = parsed;
   }
 
+  /// 补充剂输入 → 数值（非法/空按 0）
+  double _supplementValue(TextEditingController c) {
+    final v = double.tryParse(c.text.trim());
+    return (v != null && v >= 0) ? v : 0;
+  }
+
+  bool get _hasContent =>
+      _selected.isNotEmpty ||
+      _supplementValue(_vitaminACtrl) > 0 ||
+      _supplementValue(_vitaminCCtrl) > 0;
+
   Future<void> _save() async {
-    if (_selected.isEmpty) {
+    if (!_hasContent) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('至少选一个食物')),
+        const SnackBar(content: Text('至少选一个食物或填一项补充剂')),
       );
       return;
     }
@@ -142,11 +262,14 @@ class _MealRecordPageState extends State<MealRecordPage> {
         .toList();
     final meal = Meal(
       id: widget.mealId,
+      babyId: AppState.instance.activeBabyId ?? 1,
       mealType: _mealType,
       date: _date,
       foodsJson: Meal.encodeFoods(foods),
       photoPath: _savedPhotoPath,
       note: _noteCtrl.text.trim(),
+      vitaminASupplement: _supplementValue(_vitaminACtrl),
+      vitaminCSupplement: _supplementValue(_vitaminCCtrl),
     );
     if (widget.mealId == null) {
       await DatabaseHelper.instance.insertMeal(meal);
@@ -163,11 +286,11 @@ class _MealRecordPageState extends State<MealRecordPage> {
       appBar: AppBar(
         title: Text(widget.mealId == null ? '记录这一餐' : '编辑这一餐'),
         actions: [
-          if (_selected.isNotEmpty)
+          if (_hasContent)
             TextButton(onPressed: _save, child: const Text('保存', style: TextStyle(color: Colors.white, fontSize: 16))),
         ],
       ),
-      floatingActionButton: _selected.isEmpty
+      floatingActionButton: !_hasContent
           ? null
           : FloatingActionButton.extended(
               onPressed: _save,
@@ -193,8 +316,13 @@ class _MealRecordPageState extends State<MealRecordPage> {
                     }).toList(),
                   ),
                   const SizedBox(height: 20),
+                  _sectionTitle('常用组合'),
+                  _buildCombosSection(),
+                  const SizedBox(height: 20),
                   _sectionTitle('吃了什么（点击选择）'),
                   ...FoodDatabase.categories.map((cat) => _buildCategory(cat)),
+                  const SizedBox(height: 20),
+                  _buildSupplementsSection(),
                   const SizedBox(height: 20),
                   _sectionTitle('拍张照片'),
                   GestureDetector(
@@ -260,6 +388,109 @@ class _MealRecordPageState extends State<MealRecordPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  /// 常用组合：横向 chips 一键套用 + "存为组合"按钮
+  Widget _buildCombosSection() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        ..._combos.map((combo) => InputChip(
+              avatar: const Icon(Icons.fastfood, size: 16),
+              label: Text(combo.name),
+              onPressed: () => _applyCombo(combo),
+              onDeleted: () => _deleteCombo(combo),
+              deleteIconColor: Colors.grey,
+            )),
+        ActionChip(
+          avatar: const Icon(Icons.add, size: 16),
+          label: const Text('存为组合'),
+          backgroundColor: AppTheme.primary.withOpacity(0.12),
+          onPressed: _saveAsCombo,
+        ),
+        if (_combos.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(left: 4),
+            child: Text('选好食物后可存为常用组合', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+      ],
+    );
+  }
+
+  /// 额外补充剂（鱼肝油/维C片等）：单独计入该餐，不影响食物克重
+  Widget _buildSupplementsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('额外补充剂（可选）'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '吃了鱼肝油、维生素片等补充剂时填这里，会算进当天的营养摄入。没有就留空。',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.healing, size: 18, color: AppTheme.accent),
+                    const SizedBox(width: 6),
+                    const Text('维生素A', style: TextStyle(fontSize: 14)),
+                    const Spacer(),
+                    SizedBox(
+                      width: 120,
+                      child: TextField(
+                        controller: _vitaminACtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: '0',
+                          suffixText: 'μg',
+                          suffixStyle: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.healing, size: 18, color: AppTheme.accent),
+                    const SizedBox(width: 6),
+                    const Text('维生素C', style: TextStyle(fontSize: 14)),
+                    const Spacer(),
+                    SizedBox(
+                      width: 120,
+                      child: TextField(
+                        controller: _vitaminCCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: '0',
+                          suffixText: 'mg',
+                          suffixStyle: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -358,6 +589,8 @@ class _MealRecordPageState extends State<MealRecordPage> {
       c.dispose();
     }
     _noteCtrl.dispose();
+    _vitaminACtrl.dispose();
+    _vitaminCCtrl.dispose();
     super.dispose();
   }
 }

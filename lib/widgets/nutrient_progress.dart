@@ -9,6 +9,8 @@ class NutrientProgress extends StatelessWidget {
   final double value;
   final double target;
   final String unit;
+  /// 点击营养名称的回调（用于查看食物来源）；不传则名称不可点
+  final VoidCallback? onLabelTap;
 
   const NutrientProgress({
     super.key,
@@ -16,6 +18,7 @@ class NutrientProgress extends StatelessWidget {
     required this.value,
     required this.target,
     required this.unit,
+    this.onLabelTap,
   });
 
   @override
@@ -36,7 +39,31 @@ class NutrientProgress extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            onLabelTap == null
+                ? Text(label, style: const TextStyle(fontWeight: FontWeight.w600))
+                : InkWell(
+                    onTap: onLabelTap,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryDark,
+                              decoration: TextDecoration.underline,
+                              decorationStyle: TextDecorationStyle.dotted,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Icon(Icons.info_outline, size: 13, color: AppTheme.primaryDark),
+                        ],
+                      ),
+                    ),
+                  ),
             Text.rich(
               TextSpan(
                 children: [

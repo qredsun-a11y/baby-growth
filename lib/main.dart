@@ -4,6 +4,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'app.dart';
+import 'services/app_state.dart';
 import 'services/notification_service.dart';
 
 /// App 入口。
@@ -18,6 +19,8 @@ Future<void> main() async {
 
   // 初始化通知插件并请求权限（首次使用会弹系统授权）
   await NotificationService.instance.init();
+  // 初始化全局状态：读取当前选中的宝宝
+  await AppState.instance.init();
 
   runApp(const BabyNutritionApp());
 }
